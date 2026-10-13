@@ -135,3 +135,13 @@ Read this first in any new session instead of re-reading chat. Keep it current.
 - TrueNAS = 25.10.x at 192.168.0.215 (from /api/versions). The controller pins the newest listed API version.
 - Next: web/ (React + Vite + TanStack Query), Dockerfile, workflow, k8s manifests (controller + tailscale sidecar, lan gateway).
 export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gnu:/home/node/.local/chromelibs/root/lib/x86_64-linux-gnu  # for screenshots: node $SCRATCH/pw/shot.mjs URL OUT [w h scheme]
+- 2026-10-13: Web UI built (Dashboard, Apps, AppDetail, Deploy, Cluster, Proxmox, TrueNAS, Activity, Settings, Ctrl+K palette,
+  mobile layout). Verified with headless Chromium screenshots (desktop + 390px light).
+- Repo chevvyy/homelab-ui (private) pushed; Actions builds OK; image ghcr.io/chevvyy/homelab-ui:0.1.0 exists (tag v0.1.0).
+  Smoke pod in claude-sandbox: health OK, UI served. Startup takes ~10-20 s.
+- k8s/: storage (data local-path, backup nfs-bulk, lan-gateway-state), tailscale-serve ConfigMap, controller (+tailscale sidecar,
+  userspace, state on PVC, TS_KUBE_SECRET=""), lan-gateway. Deploy: `kubectl apply -k k8s/` (namespace homelab-ui).
+- WAITING ON USER: bootstrap apply, secrets proxmox/truenas/github/tailscale-auth. Then I: copy ghcr pull secret
+  claude-sandbox → homelab-ui (pipe, never print), apply -k, read the tailscale IPs of controller/homelab-lan, and give the user
+  the DNS records (controller A + *.lan A, DNS only). Then do an E2E check in homelab-apps (image, GitHub manifests, GitHub Dockerfile,
+  internal/public, links, 4 failure modes). Later: share-app migration (ask first: it is live at share.howellsas.com).

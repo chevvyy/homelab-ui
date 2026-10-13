@@ -73,4 +73,8 @@ Each phase ends with a demo I verify myself (curl, kubectl or a browser check) b
 - Restart-safety test, token rotation in the UI, share-app under management, README and runbook,
   tag v0.1.0.
 
+## Status (2026-10-13)
+- Phases 1-7 code complete and pushed (v0.1.0). Verified locally against the live cluster, and with the image smoke test.
+- Blocked on the user's Phase 0 tasks; then deploy, DNS, E2E verification, share-app migration (needs a yes first).
+
 ## Open questions → answers recorded in CONTEXT.md §Decisions
