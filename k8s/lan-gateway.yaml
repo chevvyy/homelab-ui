@@ -1,0 +1,58 @@
+# Tailscale-only entry for Internal apps: a tailnet node ("homelab-lan") that forwards :80 to
+# Traefik. DNS: *.lan.howellsas.com -> this node's 100.x address (DNS-only record in Cloudflare).
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: lan-gateway
+  labels: {app.kubernetes.io/name: lan-gateway}
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: lan-gateway}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: lan-gateway}
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      containers:
+        - name: tailscale
+          image: tailscale/tailscale:stable
+          env:
+            - name: TS_AUTHKEY
+              valueFrom: {secretKeyRef: {name: tailscale-auth, key: TS_AUTHKEY}}
+            - {name: TS_HOSTNAME, value: homelab-lan}
+            - {name: TS_USERSPACE, value: "true"}
+            - {name: TS_KUBE_SECRET, value: ""}
+            - {name: TS_STATE_DIR, value: /state}
+            - {name: TS_SERVE_CONFIG, value: /config/lan-gateway.json}
+            - {name: TS_EXTRA_ARGS, value: "--advertise-tags=tag:homelab-ui"}
+            - {name: TS_ENABLE_HEALTH_CHECK, value: "true"}
+            - {name: TS_LOCAL_ADDR_PORT, value: "0.0.0.0:9002"}
+          ports:
+            - {name: ts-health, containerPort: 9002}
+          livenessProbe:
+            httpGet: {path: /healthz, port: ts-health}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - {name: state, mountPath: /state}
+            - {name: serve-config, mountPath: /config}
+            - {name: tmp, mountPath: /tmp}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 10m, memory: 48Mi}
+            limits: {cpu: 500m, memory: 192Mi}
+      volumes:
+        - name: state
+          persistentVolumeClaim: {claimName: lan-gateway-state}
+        - name: tmp
+          emptyDir: {}
+        - name: serve-config
+          configMap: {name: tailscale-serve}

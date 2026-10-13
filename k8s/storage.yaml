@@ -1,0 +1,31 @@
+# SQLite state (and the controller's Tailscale node state) on node-local disk.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homelab-ui-data
+  labels: {app.kubernetes.io/name: homelab-ui}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: {requests: {storage: 1Gi}}
+---
+# Nightly SQLite backups land on the NAS.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: homelab-ui-backup
+  labels: {app.kubernetes.io/name: homelab-ui}
+spec:
+  accessModes: [ReadWriteMany]
+  storageClassName: nfs-bulk
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: lan-gateway-state
+  labels: {app.kubernetes.io/name: lan-gateway}
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: local-path
+  resources: {requests: {storage: 64Mi}}

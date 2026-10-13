@@ -1,0 +1,13 @@
+# tailscale serve configs. Raw TCP forwarding keeps the Host header intact.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tailscale-serve
+data:
+  # Controller: tailnet :80 -> UI on loopback, prefixed with a PROXY v1 header so the controller
+  # can ask Tailscale (whois) who is connecting.
+  controller.json: |
+    {"TCP": {"80": {"TCPForward": "127.0.0.1:3000", "ProxyProtocol": 1}}}
+  # LAN gateway: tailnet :80 -> Traefik, which routes *.lan.howellsas.com to Internal apps.
+  lan-gateway.json: |
+    {"TCP": {"80": {"TCPForward": "traefik.kube-system.svc.cluster.local:80"}}}

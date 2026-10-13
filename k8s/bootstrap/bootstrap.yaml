@@ -1,0 +1,141 @@
+# One-time bootstrap for homelab-ui. Applied by the cluster owner (cluster-scoped objects):
+#   kubectl apply -f bootstrap.yaml
+# Creates the homelab-ui (controller) and homelab-apps (deployed apps) namespaces, the
+# controller's ServiceAccount and RBAC, and lets Claude's ServiceAccount (claude:claude) deploy
+# into both namespaces.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homelab-ui
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+---
+# Apps use "baseline" rather than "restricted" so ordinary images that expect root still run;
+# "restricted" violations show up as warnings only.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: homelab-apps
+  labels:
+    pod-security.kubernetes.io/enforce: baseline
+    pod-security.kubernetes.io/warn: restricted
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: homelab-ui
+  namespace: homelab-ui
+---
+# Cluster-wide read access so the UI can display everything (Secrets excluded).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-ui-view
+rules:
+  - apiGroups: [""]
+    resources: [namespaces, nodes, pods, pods/log, services, endpoints, events, configmaps,
+                persistentvolumeclaims, persistentvolumes, serviceaccounts, resourcequotas]
+    verbs: [get, list, watch]
+  - apiGroups: [apps]
+    resources: [deployments, replicasets, statefulsets, daemonsets]
+    verbs: [get, list, watch]
+  - apiGroups: [batch]
+    resources: [jobs, cronjobs]
+    verbs: [get, list, watch]
+  - apiGroups: [networking.k8s.io]
+    resources: [ingresses, ingressclasses, networkpolicies]
+    verbs: [get, list, watch]
+  - apiGroups: [storage.k8s.io]
+    resources: [storageclasses]
+    verbs: [get, list, watch]
+  - apiGroups: [traefik.io]
+    resources: [ingressroutes, middlewares, ingressroutetcps]
+    verbs: [get, list, watch]
+  - apiGroups: [metrics.k8s.io]
+    resources: [nodes, pods]
+    verbs: [get, list]
+  - apiGroups: [events.k8s.io]
+    resources: [events]
+    verbs: [get, list, watch]
+---
+# Day-2 actions on apps that already exist in any namespace: restart (template annotation patch),
+# scale, and pod deletion. The controller refuses these in kube-system and cattle-* itself;
+# remove this rule to make other namespaces strictly read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-ui-operate
+rules:
+  - apiGroups: [apps]
+    resources: [deployments, statefulsets, daemonsets]
+    verbs: [patch]
+  - apiGroups: [apps]
+    resources: [deployments/scale, statefulsets/scale]
+    verbs: [get, patch, update]
+  - apiGroups: [""]
+    resources: [pods]
+    verbs: [delete]
+---
+# Full management inside the namespaces the controller deploys into.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: homelab-ui-manage
+rules:
+  - apiGroups: ["", apps, batch, networking.k8s.io, traefik.io, policy, autoscaling]
+    resources: ["*"]
+    verbs: ["*"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-ui-view
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-view}
+subjects:
+  - {kind: ServiceAccount, name: homelab-ui, namespace: homelab-ui}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: homelab-ui-operate
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-operate}
+subjects:
+  - {kind: ServiceAccount, name: homelab-ui, namespace: homelab-ui}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homelab-ui-manage
+  namespace: homelab-apps
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-manage}
+subjects:
+  - {kind: ServiceAccount, name: homelab-ui, namespace: homelab-ui}
+---
+# The controller reads its own Secrets (credentials, GHCR pull secret source).
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: homelab-ui-self
+  namespace: homelab-ui
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-manage}
+subjects:
+  - {kind: ServiceAccount, name: homelab-ui, namespace: homelab-ui}
+---
+# Claude (claude:claude) builds and deploys in both namespaces.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-admin
+  namespace: homelab-ui
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-manage}
+subjects:
+  - {kind: ServiceAccount, name: claude, namespace: claude}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: claude-admin
+  namespace: homelab-apps
+roleRef: {apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: homelab-ui-manage}
+subjects:
+  - {kind: ServiceAccount, name: claude, namespace: claude}

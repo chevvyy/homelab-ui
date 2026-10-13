@@ -1,0 +1,105 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: homelab-ui
+  labels: {app.kubernetes.io/name: homelab-ui}
+spec:
+  replicas: 1
+  # One Tailscale identity and an RWO volume: never run two at once.
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app.kubernetes.io/name: homelab-ui}
+  template:
+    metadata:
+      labels: {app.kubernetes.io/name: homelab-ui}
+    spec:
+      serviceAccountName: homelab-ui
+      imagePullSecrets: [{name: ghcr}]
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        runAsGroup: 1000
+        fsGroup: 1000
+        seccompProfile: {type: RuntimeDefault}
+      initContainers:
+        - name: init-dirs
+          image: busybox:1.37
+          command: ["sh", "-c", "mkdir -p /data/tailscale /data/db"]
+          volumeMounts: [{name: data, mountPath: /data}]
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 100m, memory: 32Mi}
+      containers:
+        - name: controller
+          image: ghcr.io/chevvyy/homelab-ui
+          env:
+            - name: SELF_NAMESPACE
+              valueFrom: {fieldRef: {fieldPath: metadata.namespace}}
+            - {name: APPS_NAMESPACE, value: homelab-apps}
+            - {name: DATA_DIR, value: /data/db}
+            - {name: BACKUP_DIR, value: /backup}
+            - {name: TS_SOCKET, value: /var/run/tailscale/tailscaled.sock}
+            - {name: AUTH_MODE, value: tailscale}
+            # Comma-separated Tailscale logins allowed in; empty = any user-owned device on the tailnet.
+            - {name: ALLOWED_LOGINS, value: ""}
+            - {name: TZ, value: America/Chicago}
+          ports:
+            - {name: health, containerPort: 8081}
+          readinessProbe:
+            httpGet: {path: /readyz, port: health}
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: {path: /healthz, port: health}
+            periodSeconds: 20
+            failureThreshold: 3
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: backup, mountPath: /backup}
+            - {name: ts-socket, mountPath: /var/run/tailscale}
+            - {name: tmp, mountPath: /tmp}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 50m, memory: 192Mi}
+            limits: {cpu: "1", memory: 768Mi}
+        - name: tailscale
+          image: tailscale/tailscale:stable
+          env:
+            - name: TS_AUTHKEY
+              valueFrom: {secretKeyRef: {name: tailscale-auth, key: TS_AUTHKEY}}
+            - {name: TS_HOSTNAME, value: controller}
+            - {name: TS_USERSPACE, value: "true"}
+            # State lives on the PVC (not a k8s Secret) so the node keeps its tailnet IP.
+            - {name: TS_KUBE_SECRET, value: ""}
+            - {name: TS_STATE_DIR, value: /data/tailscale}
+            - {name: TS_SOCKET, value: /var/run/tailscale/tailscaled.sock}
+            - {name: TS_SERVE_CONFIG, value: /config/controller.json}
+            - {name: TS_EXTRA_ARGS, value: "--advertise-tags=tag:homelab-ui"}
+            - {name: TS_ENABLE_HEALTH_CHECK, value: "true"}
+            - {name: TS_LOCAL_ADDR_PORT, value: "0.0.0.0:9002"}
+          ports:
+            - {name: ts-health, containerPort: 9002}
+          livenessProbe:
+            httpGet: {path: /healthz, port: ts-health}
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          volumeMounts:
+            - {name: data, mountPath: /data}
+            - {name: ts-socket, mountPath: /var/run/tailscale}
+            - {name: serve-config, mountPath: /config}
+            - {name: tmp, mountPath: /tmp}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+          resources:
+            requests: {cpu: 10m, memory: 48Mi}
+            limits: {cpu: 500m, memory: 192Mi}
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: homelab-ui-data}
+        - name: backup
+          persistentVolumeClaim: {claimName: homelab-ui-backup}
+        - name: ts-socket
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: serve-config
+          configMap: {name: tailscale-serve}

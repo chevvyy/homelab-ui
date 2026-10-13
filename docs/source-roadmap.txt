@@ -1,0 +1,522 @@
+PAGES 13
+
+
+Homelab Control Plane: 4-Week Roadmap
+Oct 7, 2026 ·  @Dev How
+Scope
+In 28 days you ship a web app, running inside k3s, that watches your cluster, Proxmox and
+TrueNAS live and deploys, links, exposes and deletes apps from three sources (weeks 1–
+2), then wrap it as a desktop app and an iPhone app (weeks 3–4). Plan on roughly 3
+focused hours a day; if you have less, stretch each week rather than cutting the Definition
+of Done.
+In scope (must ship)
+Live views of k3s workloads, Proxmox nodes/VMs/LXCs and TrueNAS
+pools/datasets/alerts, updating without refresh
+Deploy from a pasted YAML, a container image reference, or a GitHub repo URL
+Create, update, restart, scale, roll back and delete deployments, with errors explained
+in plain language
+One toggle per app: Internal (Tailscale only), Public (howellsas.com via Cloudflare
+Tunnel), or Off
+Link app A to app B so A gets B's in-cluster address injected automatically
+One sign-in to the wrapper; the backend holds every system credential, so switching
+systems is a sidebar click
+Out of scope (Rancher does this, you don't need it)
+Multiple users, RBAC, teams and projects
+Cluster provisioning, node upgrades, Helm catalog browsing
+Creating or editing Proxmox VMs and TrueNAS pools (read and basic power/snapshot
+actions only)
+Monitoring stack and long-term metrics history
+Architecture
+One TypeScript backend runs as a Deployment in k3s, keeps a live cache of all three
+systems, and pushes changes to the browser over one WebSocket. The cluster stays the
+source of truth: every object the wrapper creates carries its labels, so nothing is lost if the
+Homelab Control Plane: 2-Week Roadmap
+Page 1 of 13
+
+wrapper restarts.
+The browser only ever talks to the wrapper; the wrapper alone holds the credentials for
+every system it calls.
+wrapper architecture · 1 backend, 4 APIs
+LayerChoiceWhy
+BackendNode + Fastify, TypeScriptMatches your JS coursework;
+one language front to back
+k8s access
+@kubernetes/client-node
+informers (watch + cache)
+Same pattern Rancher uses;
+no polling
+Proxmox accessREST API with a scoped API token,
+polled every 5 s
+Proxmox has no watch API
+TrueNAS accessJSON-RPC 2.0 WebSocket API, API
+key
+REST is removed in TrueNAS
+26; start on the API that
+survives
+FrontendReact + Vite + TanStack Query,
+served by the backend
+One container to deploy
+Homelab Control Plane: 2-Week Roadmap
+Page 2 of 13
+
+Key design decisions
+1. App = a label, not a CRD. Everything for an app gets 
+homelab.io/app=<name>
+ and
+homelab.io/managed=true
+. The original source (YAML, image or repo + commit) is
+saved in an annotation. A CRD + controller is the week-3 upgrade.
+2. Exposure = which Traefik entrypoint and hostname. Internal apps get
+<app>.lan.howellsas.com
+ on a Tailscale-only entrypoint. Public apps get
+<app>.howellsas.com
+; a wildcard Cloudflare Tunnel route sends 
+*.howellsas.com
+ to
+Traefik, so switching is one IngressRoute patch plus one Cloudflare DNS record.
+3. Linking = injected env vars. Linking A to B adds 
+B_URL=http://b.
+<ns>.svc.cluster.local:<port>
+ to A and rolls A. Optional: a NetworkPolicy that
+allows only linked traffic.
+4. One sign-in. You log into the wrapper once (password + session cookie, or Tailscale
+identity headers via 
+tailscale serve
+). Proxmox, TrueNAS and k8s credentials live
+server-side, encrypted in SQLite, so the browser never handles them.
+5. Storage defaults to TrueNAS. Generated PVCs use your democratic-csi StorageClass
+unless the user picks node-local.
+Open question: does the Caddy VPS path (used for Jellyfin) become a third exposure
+mode, or stay manual? The plan treats it as a stretch goal.
+Week 1: Foundations, live views, first deploys
+By day 7 you can watch all three systems and run an image app through its whole life
+without touching kubectl.
+Day 1: Skeleton running in k3s
+Monorepo: 
+server/
+ (Fastify) and 
+web/
+ (Vite + React); one multi-stage Dockerfile
+LayerChoiceWhy
+Local stateSQLite on a small PVCConnection settings,
+encrypted tokens, deploy
+history
+Builds (GitHub with
+Dockerfile)
+Kaniko Job pushing to an in-cluster
+registry:2
+Builds inside k3s, no Docker
+socket
+Wrapper accessInternal only, via TailscaleYou never expose the control
+plane publicly
+Homelab Control Plane: 2-Week Roadmap
+Page 3 of 13
+
+Namespace 
+homelab-ui
+, a ServiceAccount, and a ClusterRole scoped to the kinds you
+manage
+Deploy it; reach it only over Tailscale
+Done when: the page loads at its internal URL and 
+/api/health
+ lists the namespaces
+it can see
+Day 2: One sign-in and the system switcher
+Login page, session cookie, SQLite on a 1 GiB PVC
+Connections table: type, URL, token encrypted with a key from a k8s Secret
+Sidebar with Cluster, Proxmox and TrueNAS; a "Test connection" button per system
+Done when: you add Proxmox and TrueNAS once, refresh, and switch between them
+with no further prompts
+Day 3: Kubernetes watch engine
+Informers for Namespaces, Deployments, ReplicaSets, Pods, Services, Ingresses,
+Traefik IngressRoutes, PVCs and Events
+In-memory cache; push diffs to the browser over one WebSocket
+Workloads list grouped by 
+homelab.io/app
+, plus a detail page with pods, events and
+status
+Done when: 
+kubectl scale
+ in a terminal shows up in the UI within 2 seconds
+Day 4: Proxmox and TrueNAS views
+Proxmox: poll 
+/cluster/resources
+; node CPU, RAM and status; VM/LXC list with
+start, shutdown and stop
+TrueNAS: WebSocket login with API key; pools, datasets with used/free, and
+alert.list
+, subscribed for live alerts
+Back-off and a "disconnected" banner when either system drops
+Done when: all three tabs update live, and pulling the TrueNAS network cable shows
+the banner instead of a crash
+Day 5: Deploy from YAML
+Paste or upload multi-document YAML; parse and validate
+Inject the app labels, then server-side dry-run and show errors or a summary before
+the real apply
+Real apply with server-side apply and a fixed field manager; store the YAML in an
+annotation
+Homelab Control Plane: 2-Week Roadmap
+Page 4 of 13
+
+Done when: share-app's manifests deploy through the UI and appear as one app
+Day 6: Deploy from an image link
+Form: image, port, replicas, env vars, optional volume size
+Check the image exists in its registry before deploying, to catch typos early
+Generate Deployment + Service + PVC (democratic-csi StorageClass) + an
+IngressRoute set to Off
+Done when: 
+traefik/whoami
+ deploys from the form and is reachable in-cluster
+Day 7: Manage, delete, catch up
+Restart (patch a template annotation), scale, edit env, live log streaming
+Delete by label across every kind, with a "keep volumes" checkbox on by default
+Use leftover time to fix days 1 to 6
+Done when: an image app goes create, scale, restart, edit, delete in the UI only
+Week 2: GitHub, exposure, linking, errors
+By day 14 any repo, image or YAML goes live behind a one-click Internal/Public toggle,
+apps find each other automatically, and every failure explains itself.
+Day 8: GitHub deploys, manifests path
+Input: repo URL, branch, optional token for private repos
+Download the tarball through the GitHub API and pin the commit SHA
+Detect in order: 
+kustomization.yaml
+, a 
+k8s/
+ or 
+deploy/
+ folder of manifests, then a
+Dockerfile
+Manifests feed into the day 5 YAML path; a "Redeploy latest" button fetches the
+newest commit
+Done when: a repo of manifests deploys and redeploys by SHA
+Day 9: GitHub deploys, Dockerfile path
+Run 
+registry:2
+ in-cluster and add it to k3s 
+registries.yaml
+ on every node
+Build with a Kaniko Job; stream its logs to the UI; push 
+registry/<app>:<sha>
+Hand the built image to the day 6 image path
+Done when: share-app builds from GitHub and runs from your own registry
+Day 10: Ingress and Traefik switching
+Homelab Control Plane: 2-Week Roadmap
+Page 5 of 13
+
+Traefik: a public entrypoint behind the Cloudflare Tunnel, and an internal entrypoint
+limited to Tailscale's 100.64.0.0/10 range
+One wildcard tunnel route, 
+*.howellsas.com
+ to Traefik, so the tunnel config never
+changes per app
+Toggle per app: Internal patches the IngressRoute to 
+<app>.lan.howellsas.com
+;
+Public sets 
+<app>.howellsas.com
+ and creates the Cloudflare DNS record via API; Off
+removes both
+Custom hostname field, with a check that the name isn't already taken
+Done when: whoami flips Internal to Public to Off in under 30 seconds, each state
+verified with curl
+Day 11: Linking deployments
+"Link to" picker on the app page; inject 
+<TARGET>_URL
+ and 
+<TARGET>_HOST
+ env vars,
+then roll the app
+Show links on both apps; unlinking removes the vars
+Deleting a linked app warns you which apps depend on it
+Done when: app A reaches app B through 
+B_URL
+ with no manual Service names
+Day 12: Error handling
+Status translator from k8s reasons to plain sentences and a fix: ImagePullBackOff,
+CrashLoopBackOff (with exit code and last 20 log lines), Pending (unschedulable or
+unbound PVC), OOMKilled
+Rollout watcher using 
+progressDeadlineSeconds
+; on failure, offer one-click rollback to
+the previous ReplicaSet
+Normalize API errors: 409 conflicts, 422 validation, 403 RBAC gaps
+Done when: you break an app 4 different ways and each shows the cause and a next
+step
+Day 13: Polish
+Home dashboard: app counts, failing apps, Proxmox node load, TrueNAS alerts on one
+screen
+Command palette (Ctrl+K) to jump between systems and apps; layout that works on
+your phone
+Nightly backup of the SQLite file to a TrueNAS dataset
+Done when: you can find and restart any app from your phone in under 15 seconds
+Homelab Control Plane: 2-Week Roadmap
+Page 6 of 13
+
+Day 14: Migrate, test, document
+Move share-app under wrapper management
+Restart the wrapper mid-deploy and confirm nothing is orphaned
+Rotate the Proxmox and TrueNAS tokens through the UI
+README with setup and a short runbook; tag v0.1
+Done when: every Definition of Done box below is ticked
+Weeks 3–4: From web page to app
+The app is a thin native shell around the same React UI you built in weeks 1–2. The
+backend stays in k3s and does all the work; the app only adds a saved sign-in,
+notifications, a tray icon and phone-friendly controls.
+What you need before day 15: Rust installed (
+rustup
+), Xcode on your Mac, and Tailscale
+on your iPhone. Free Apple ID signing works on your own phone but expires every 7 days;
+the $99/yr Apple Developer Program gives TestFlight builds that last 90 days. Decide
+which one you want by day 23.
+DecisionChoiceWhy
+ShellTauri 2 (desktop + iOS from one
+project)
+Reuses 
+web/
+ as is; small binaries;
+one codebase for Mac, Windows and
+iPhone
+Sign-inPair each device once, then a long-
+lived device token
+No login screen on every launch;
+revoke a lost device from the web UI
+Token
+storage
+Tauri Stronghold plugin (encrypted
+vault)
+Token never sits in plain localStorage
+Phone
+unlock
+Face ID via the Tauri biometric plugin,
+only before destructive actions
+Fast to open, safe to delete
+Phone
+alerts
+Self-hosted ntfy in k3s + the ntfy iOS
+app
+Real push without building your own
+APNs server
+Network
+path
+Tailscale on every device, same
+internal URL as the web app
+The control plane stays off the public
+internet
+Homelab Control Plane: 2-Week Roadmap
+Page 7 of 13
+
+Week 3: Desktop app
+By day 21 a Mac and Windows app opens straight to your dashboard, sits in the tray
+showing cluster health, alerts you when something breaks, and updates itself.
+Day 15: Backend ready for native clients
+Add device tokens: 
+POST /api/v1/devices/pair
+ issues a bearer token; store a hash,
+name and last-seen time per device
+Accept 
+Authorization: Bearer
+ on every route; WebSocket authenticates with the
+token in its first message
+CORS for the Tauri origins (
+tauri://localhost
+, 
+http://tauri.localhost
+); move
+routes under 
+/api/v1
+Devices page in the web UI with a Revoke button
+Done when: curl with a bearer token works, and revoking it closes that device's open
+WebSocket
+Day 16: Tauri shell
+npm create tauri-app
+ in 
+desktop/
+, pointing its frontend at the existing 
+web/
+ build
+First-run screen: enter the server URL (your internal hostname), then a connection
+test
+Switch the API client from cookies to the bearer token when running inside Tauri
+Done when: the Mac app shows the live dashboard from your cluster
+Day 17: Sign in once per device
+Pairing: the web UI shows a 6-digit code (valid 5 minutes); the app exchanges it for a
+device token
+Save the token with the Stronghold plugin; auto-reconnect with back-off
+Offline screen that says "Tailscale is off or the server is down" rather than a blank page
+Done when: quitting and reopening the app goes straight to the dashboard with no
+login
+Day 18: Tray and notifications
+Tray icon colored by health: green, yellow (Pending or rollout in progress), red (any
+failing app or TrueNAS alert)
+Tray menu: open, the failing apps list, restart a failing app
+Native notifications for a failed rollout, CrashLoopBackOff and new TrueNAS alerts;
+launch at login (autostart plugin)
+Homelab Control Plane: 2-Week Roadmap
+Page 8 of 13
+
+Done when: you break an app with the window closed and a notification arrives within
+10 seconds
+Day 19: Desktop-only deploy shortcuts
+Drag a YAML file onto the window to open the deploy preview
+Deep link 
+homelab://deploy?repo=<github url>
+ (deep-link plugin) so a bookmarklet
+can send a repo to the app
+Global shortcut for the command palette
+Done when: dragging share-app's YAML onto the window deploys it
+Day 20: Packaging and auto-update
+GitHub Actions matrix: macOS 
+.dmg
+ and Windows 
+.msi
+ via 
+tauri-action
+, attached
+to a GitHub Release
+Updater plugin with a signing key, reading 
+latest.json
+ from your releases
+Unsigned macOS builds need right-click, Open the first time; Apple notarization needs
+the paid program
+Done when: v0.2 installs on both OSes and updates itself to v0.2.1
+Day 21: Buffer
+Fix what slipped; test the Windows build on your gaming VM
+Done when: the week 3 boxes in Definition of done are ticked
+Week 4: iPhone app
+By day 28 the app runs on your iPhone, pairs by scanning a QR code, asks for Face ID
+before anything destructive, and pushes alerts even when it's closed.
+Day 22: Mobile layout
+Bottom tab bar: Apps, Systems, Alerts, Deploy; the sidebar collapses below 768 px
+Touch targets at least 44 px; tables become cards on narrow screens
+Done when: every screen works at 390 px wide in the browser's device view
+Day 23: iOS build
+npm run tauri ios init
+, then 
+tauri ios dev
+ to your phone over USB through
+Xcode
+Pick signing: free Apple ID (re-install every 7 days) or the paid program (TestFlight)
+Homelab Control Plane: 2-Week Roadmap
+Page 9 of 13
+
+Allow your internal hostname in the app's network settings; confirm Tailscale on the
+phone reaches it
+Done when: the app on your iPhone lists your apps live
+Day 24: QR pairing and Face ID
+Devices page shows a QR code holding the server URL plus a one-time pairing code;
+the app scans it with the camera
+Token saved in Stronghold; Face ID (biometric plugin) required before delete, scale to 0
+and Public exposure
+Done when: pairing takes under 30 seconds, and a delete without Face ID is refused
+Day 25: Push alerts
+Deploy ntfy in k3s with its iOS upstream set to 
+ntfy.sh
+ so notifications reach Apple's
+push service
+Backend posts to a private topic on rollout failure, CrashLoopBackOff and TrueNAS
+alerts, with a click URL of 
+homelab://app/<name>
+Subscribe in the ntfy iOS app; tapping an alert opens your app on that app's page
+Done when: a broken app alerts your phone with both apps closed
+Day 26: Phone-first actions
+Swipe actions on app cards: restart, scale, Internal/Public/Off
+Log tail with pause and follow; tap a pod to see its last error
+Deploy tab: paste a GitHub or image link; the app detects which kind it is
+Done when: you restart, re-expose and redeploy an app one-handed
+Day 27: Background and reconnect
+iOS drops the WebSocket when the app is in the background; on resume, refetch the
+snapshot and resubscribe
+Show a "last updated" time while reconnecting so stale data is obvious
+Rotate device tokens every 30 days in the background; handle a revoked token by
+returning to pairing
+Done when: after the phone sits locked for 10 minutes, unlocking shows current data
+within 3 seconds
+Day 28: Release
+Homelab Control Plane: 2-Week Roadmap
+Page 10 of 13
+
+TestFlight build (paid) or a fresh signed install (free); tag v1.0 across the web, desktop
+and iPhone builds
+README sections for pairing a device, revoking one, and installing each build
+Done when: every Definition of done box, weeks 1–4, is ticked
+Definition of done
+Weeks 3–4 (app)
+Risks and cut list
+If you fall behind, cut from the bottom of this list first; each cut keeps the Definition of
+Done intact or moves one box to week 3.
+Cluster, Proxmox and TrueNAS views update live, with no page refresh
+Signed in once, you can switch between all three systems with one click
+Deploys work from YAML, an image link, a GitHub manifests repo and a GitHub
+Dockerfile repo
+Create, scale, restart, edit, roll back and delete all work from the UI
+Internal / Public / Off switching works and is verified by curl
+Linked apps reach each other through injected env vars
+Four deliberate failures each show a plain-language cause and fix
+Restarting the wrapper loses no app state
+share-app runs under wrapper management
+Desktop app on Mac and Windows opens to the dashboard with no login after pairing
+Tray icon reflects cluster health; desktop notifications fire on failures
+Desktop app updates itself from GitHub Releases
+iPhone app pairs by QR code and shows live data over Tailscale
+Face ID is required before destructive actions on the phone
+Alerts reach the phone with the app closed, and tapping one opens the right app page
+Revoking a device from the web UI locks it out immediately
+Homelab Control Plane: 2-Week Roadmap
+Page 11 of 13
+
+For weeks 3–4, cut in this order: the Windows build (day 20), desktop deploy shortcuts
+(day 19), then the native iPhone build. As a fallback for the phone, install the web app to
+your home screen from Safari and keep ntfy for alerts; you lose Face ID and QR pairing,
+nothing else.
+App risks
+Internal HTTPS: the app's webview needs a valid certificate for your internal hostname.
+Get a 
+*.lan.howellsas.com
+ wildcard via Cloudflare DNS-01 during day 10, not day 16.
+iOS signing: free signing expiring every 7 days is easy to forget. If the app becomes
+daily-use, pay for the developer program.
+Tauri iOS is younger than its desktop target: if a plugin misbehaves on iOS, Capacitor
+can wrap the same 
+web/
+ build, at a cost of about 2 days.
+Biggest risks
+Traefik entrypoints and TLS (day 10) take the longest to debug. Set up the two
+entrypoints and a wildcard cert by hand on day 7 or 8, before the UI depends on them.
+Informer reconnects: watches expire. Handle 
+410 Gone
+ by relisting, or the UI silently
+goes stale.
+TrueNAS method names change between versions (for example snapshot calls moved
+namespaces in 26). Pin the API version in the WebSocket URL.
+RBAC sprawl: start the ClusterRole narrow and add verbs as 403s show up, rather than
+granting cluster-admin.
+If behind
+by
+Cut or simplifyCost
+1 dayDay 13 dashboard and command
+palette
+Plainer UI; all features still work
+2 daysKaniko builds (day 9); build images in
+GitHub Actions to GHCR and deploy
+by image link
+Dockerfile repos need a CI step first
+3 daysProxmox/TrueNAS actions; keep them
+read-only
+No start/stop buttons yet
+4+ daysAuto Cloudflare DNS; use one wildcard
+DNS record so Public is only an
+IngressRoute patch
+Any 
+*.howellsas.com
+ name
+resolves to Traefik
+Homelab Control Plane: 2-Week Roadmap
+Page 12 of 13
+
+After week 4: an 
+App
+ CRD + controller (Kubebuilder), GitHub webhooks for auto-
+redeploy, the Caddy VPS as a third exposure mode, and NetworkPolicies generated from
+links.
+Homelab Control Plane: 2-Week Roadmap
+Page 13 of 13
