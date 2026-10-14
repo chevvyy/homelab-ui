@@ -145,3 +145,14 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   claude-sandbox → homelab-ui (pipe, never print), apply -k, read the tailscale IPs of controller/homelab-lan, and give the user
   the DNS records (controller A + *.lan A, DNS only). Then do an E2E check in homelab-apps (image, GitHub manifests, GitHub Dockerfile,
   internal/public, links, 4 failure modes). Later: share-app migration (ask first: it is live at share.howellsas.com).
+- 2026-10-14: User completed tasks 1-5. DEPLOYED v0.1.1 in homelab-ui. Tailscale IPs: controller=100.65.27.122, homelab-lan=100.107.42.126
+  (persist across restarts). Verified from the pod: Proxmox VE 9.2.9 (node "home", 4 guests; token has all 6 privs),
+  TrueNAS 25.10.7 (pool Tankl ONLINE, API v25.10.5), GitHub token OK, all 14 watches OK, whois sign-in path OK.
+- INCIDENT: a failed sed mask printed the base64 values of secrets github/proxmox/truenas/tailscale-auth in my tool output →
+  told user to rotate all four. Never print secret objects again; use jsonpath on .data keys only.
+- E2E in homelab-apps (all passed, then cleaned up): image+public via tunnel, internal via Traefik, off→404, link + reach,
+  rollback keeps link env, 4 failure modes (bad image / crash w/ log lines / OOM / unschedulable), GitHub manifests,
+  own-repo Dockerfile (workflow committed to repo), upstream repo via chevvyy/homelab-builds, redeploy latest, collision guard.
+  Leftovers on GitHub: test repo chevvyy/hlui-e2e, GHCR packages hlui-e2e + traefik-whoami (user may delete).
+- PENDING USER: Cloudflare DNS (controller A 100.65.27.122, *.lan A 100.107.42.126, DNS only), secret rotation, answers on
+  *.home.howellsas.com and share-app migration. Then: real-browser login check (needs user), share-app migration if yes.
