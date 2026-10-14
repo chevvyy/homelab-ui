@@ -37,7 +37,13 @@ export function checkHost(host: string, appId: string): { ok: boolean; message?:
 
 export async function setExposure(namespace: string, app: string, mode: Exposure, opts: { host?: string; service?: string; port?: number } = {}) {
   guardWrite(namespace);
-  const objs = appObjects(namespace, app);
+  // Right after a deploy the watch cache may lag the API by a moment; wait briefly for the app
+  // and its Service to show up.
+  let objs = appObjects(namespace, app);
+  for (let i = 0; i < 20 && (!objs || (mode !== 'off' && !objs.services.length)); i++) {
+    await new Promise((r) => setTimeout(r, 300));
+    objs = appObjects(namespace, app);
+  }
   if (!objs) throw new ActionError('App not found.', 404);
   const routeName = `${app}-route`;
   const routePath = resourcePath(R.ingressroutes, namespace, routeName);

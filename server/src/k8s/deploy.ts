@@ -2,8 +2,9 @@
 // a fixed field manager, after a server-side dry run the UI shows as a preview.
 import { loadAll } from 'js-yaml';
 import { config } from '../config.js';
-import { guardWrite } from './actions.js';
+import { ActionError, guardWrite } from './actions.js';
 import { cache } from './cache.js';
+import { takenHosts } from './exposure.js';
 import { FIELD_MANAGER, K8sError, KObject, request, resolveKind, resourcePath } from './client.js';
 import { ANN_SOURCE, AppSource, LABEL_APP, managedLabels, NAME_RE } from './labels.js';
 import { ensurePullSecret } from './pullsecret.js';
@@ -99,6 +100,12 @@ async function prepare(objects: KObject[], app: string, namespace: string, sourc
   return { prepared, warnings };
 }
 
+function manifestHosts(obj: KObject): string[] {
+  if (obj.kind === 'Ingress') return (obj.spec?.rules ?? []).map((r: any) => r.host).filter(Boolean);
+  if (obj.kind === 'IngressRoute') return (obj.spec?.routes ?? []).flatMap((r: any) => [...String(r.match ?? '').matchAll(/Host\(`([^`]+)`\)/g)].map((m) => m[1]));
+  return [];
+}
+
 function rank(kind: string): number {
   const i = ORDER.indexOf(kind);
   return i < 0 ? ORDER.length : i;
@@ -109,11 +116,21 @@ export async function applyObjects(app: string, namespace: string, objects: KObj
   validateName(namespace, 'Namespace');
   guardWrite(namespace);
   const { prepared, warnings } = await prepare(objects, app, namespace, source);
+  // Hostnames in the manifests must not steal a route that another app already serves.
+  const taken = takenHosts();
+  for (const p of prepared) {
+    for (const host of manifestHosts(p.obj)) {
+      const owner = taken.get(host);
+      if (owner && owner !== `${namespace}/${app}` && owner !== `${namespace}/${p.obj.kind}/${p.obj.metadata.name}`) {
+        throw new ActionError(`${p.obj.kind}/${p.obj.metadata.name} routes ${host}, which ${owner} already serves. Change the hostname or remove that route first.`, 409);
+      }
+    }
+  }
   // Another app already owning one of these names would get silently merged into this one.
   for (const p of prepared) {
     const existing = await request<KObject>('GET', p.path).catch(() => undefined);
     const owner = existing?.metadata.labels?.[LABEL_APP];
-    if (owner && owner !== app) throw new K8sError(409, 'Conflict', `${p.obj.kind}/${p.obj.metadata.name} already belongs to app "${owner}". Rename it or delete that app first.`);
+    if (owner && owner !== app) throw new ActionError(`${p.obj.kind}/${p.obj.metadata.name} already belongs to app "${owner}". Rename it or delete that app first.`, 409);
   }
   if (!dryRun) {
     const ps = await ensurePullSecret(namespace);

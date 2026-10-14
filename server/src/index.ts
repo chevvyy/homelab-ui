@@ -7,7 +7,7 @@ import fastifyWebsocket from '@fastify/websocket';
 import Fastify from 'fastify';
 import { identify, proxyProtocolListener } from './auth.js';
 import { config } from './config.js';
-import { backupTo } from './db.js';
+import { backupTo, failInterruptedBuilds } from './db.js';
 import { cache } from './k8s/cache.js';
 import { metrics } from './k8s/nodes.js';
 import { registerRoutes } from './routes.js';
@@ -45,6 +45,8 @@ if (existsSync(webDir)) {
 }
 
 await app.ready();
+const interrupted = failInterruptedBuilds();
+if (interrupted) app.log.warn(`${interrupted} unfinished GitHub deploy(s) marked failed after restart`);
 cache.start();
 metrics.start();
 void proxmox.start();

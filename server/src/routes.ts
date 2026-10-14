@@ -78,8 +78,10 @@ export function registerRoutes(app: FastifyInstance) {
     // Crashing containers: attach their last 20 log lines from the previous run.
     const crashLogs: Record<string, string> = {};
     for (const p of objs.app.problems.filter((x) => x.wantsLogs && x.pod && x.container).slice(0, 3)) {
-      crashLogs[`${p.pod}/${p.container}`] = await podLogs(namespace, p.pod!, p.container, 20, true).catch(() => '');
-      if (!crashLogs[`${p.pod}/${p.container}`]) crashLogs[`${p.pod}/${p.container}`] = await podLogs(namespace, p.pod!, p.container, 20).catch(() => '');
+      // The crashed run is either the current (terminated) container or the previous one.
+      const usable = (t: unknown) => (typeof t === 'string' && t.trim() && !t.startsWith('unable to retrieve container logs') ? t : '');
+      crashLogs[`${p.pod}/${p.container}`] =
+        usable(await podLogs(namespace, p.pod!, p.container, 20).catch(() => '')) || usable(await podLogs(namespace, p.pod!, p.container, 20, true).catch(() => ''));
     }
     return {
       ...objs,

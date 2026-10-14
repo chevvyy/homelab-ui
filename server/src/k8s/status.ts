@@ -144,8 +144,12 @@ export function podProblems(pod: KObject): Problem[] {
       });
       continue;
     }
-    if (waiting?.reason === 'CrashLoopBackOff') {
-      const code = last?.exitCode;
+    // Between restarts a crashing container shows either waiting/CrashLoopBackOff or (on newer
+    // kubelets) terminated with a non-zero exit code.
+    const restartsAlways = (pod.spec?.restartPolicy ?? 'Always') === 'Always';
+    const crashed = waiting?.reason === 'CrashLoopBackOff' || (restartsAlways && term && (term.exitCode !== 0 || c.restartCount > 0));
+    if (crashed) {
+      const code = term?.exitCode ?? last?.exitCode;
       out.push({
         severity: 'error',
         title: `${c.name} keeps crashing`,

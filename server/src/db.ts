@@ -67,3 +67,15 @@ export function getBuild(id: string) {
 export function backupTo(path: string) {
   db.exec(`VACUUM INTO '${path.replace(/'/g, "''")}'`);
 }
+
+// Builds are driven in memory; any left unfinished by a restart can never complete.
+export function failInterruptedBuilds(): number {
+  const rows = db.prepare("SELECT * FROM builds WHERE state IN ('queued', 'building', 'deploying')").all() as any[];
+  for (const r of rows) {
+    const data = JSON.parse(r.data);
+    data.error = 'The controller restarted during this deploy. The app itself is unaffected; deploy again to finish.';
+    data.log.push(`${new Date().toISOString().slice(11, 19)} Interrupted by a controller restart.`);
+    db.prepare("UPDATE builds SET state = 'failed', data = ? WHERE id = ?").run(JSON.stringify(data), r.id);
+  }
+  return rows.length;
+}
