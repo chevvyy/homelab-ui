@@ -170,3 +170,8 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
 - 2026-10-14: BUG FIXED v0.1.4: HTTPS over tailnet hung when ClientHello arrived in the same read as the PROXY header (TLSSocket reads the native handle, ignores unshifted bytes). Now TLS is fed via a JS Duplex. Verified 3/3 TLS handshakes over the tailnet ($SCRATCH/tlsprobe.mjs: kubectl exec lan-gateway tailscale nc). PC ERR_NETWORK_ACCESS_DENIED still to be retested by user.
 - 2026-10-14: PC block was the user's VPN (not the controller). Controller reachable from PC + phone. Remaining: secret rotation (user), share-app migration (awaiting yes/no).
 - 2026-10-14: v0.1.5: native UIs over tailnet (k8s/native-uis.yaml): https://{proxmox,truenas,rancher}.lan.howellsas.com (selector-less Services+Endpoints in homelab-ui; ServersTransport insecureSkipVerify for PVE/TrueNAS; Rancher via ClusterIP 10.43.111.121:80 — update if Rancher svc is recreated). Buttons on Cluster/Proxmox/TrueNAS/Dashboard + per-VM Console/Open in Proxmox. Tailscale on the Proxmox host: user runs commands (no shell access for me).
+- 2026-10-14 PROPOSAL (not built): "Shared resources & grants". Facts: iGPUs node-1 (3e98), node-2/3 (3e92), none on node-4;
+  intel-gpu-plugin DS in ns default with args [-enable-monitoring -v=2] → gpu.intel.com/i915=1 per node (no sharing; add
+  -shared-dev-num=N to share). arr/jellyfin holds one i915. arr apps share PVC arr/data (media library). Cross-namespace volume
+  sharing needs static PVs (cluster-scoped → bootstrap grant). Pool kinds proposed: GPU, shared volumes, shared env/secrets.
+  Grants stored in cluster (ConfigMap in homelab-ui + workload annotations); controller-enforced, optional ResourceQuota.
