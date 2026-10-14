@@ -166,3 +166,4 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   (copied per ns by k8s/lantls.ts, resynced 6h) + `<app>-route-http` redirect via Middleware homelab-https-redirect.
   Verified: trusted TLS on controller, internal app 200 over https (trusted), http→https 301.
 - 2026-10-14: user confirmed *.home.howellsas.com = home only → PRIVATE_DOMAINS (display as internal/'Home only').
+- 2026-10-14: CONFIRMED working in a real browser on the user's iPhone (DNS + Tailscale + HTTPS + whois sign-in). PC (devinpc, Windows, Chrome) shows 'Your Internet access is blocked' → local PC issue (tailnet ping to devinpc OK, ACL allows it). Awaiting error code / Test-NetConnection result.
