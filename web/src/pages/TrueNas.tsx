@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
 import { useLive } from '../live';
-import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtUptime, Meter } from '../ui';
+import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtUptime, Meter, NativeLink, useNativeLinks } from '../ui';
 
 export function TrueNas() {
   const tn = useLive((s) => s.truenas);
   const [pool, setPool] = useState('');
   const [showDismissed, setShowDismissed] = useState(false);
+  const links = useNativeLinks();
   if (!tn) return <div className="page"><h1>TrueNAS</h1><Empty>Loading…</Empty></div>;
   if (!tn.configured) return <div className="page"><h1>TrueNAS</h1><Empty>TrueNAS is not connected yet. <Link to="/settings">Add it in Settings</Link>.</Empty></div>;
 
@@ -17,7 +18,10 @@ export function TrueNas() {
     <div className="page">
       <div className="page-head">
         <h1>TrueNAS {tn.system && <span className="muted small">{tn.system.hostname} · {tn.system.version}</span>}</h1>
-        {tn.lastUpdate && <span className="muted small">updated {fmtAgo(tn.lastUpdate)} ago</span>}
+        <div className="btn-row">
+          {tn.lastUpdate && <span className="muted small">updated {fmtAgo(tn.lastUpdate)} ago</span>}
+          <NativeLink href={links.truenas}>Open TrueNAS</NativeLink>
+        </div>
       </div>
       {!tn.connected && <div className="banner banner-bad">Disconnected: {tn.error}. Showing the last known state; reconnecting.</div>}
       {tn.system && (

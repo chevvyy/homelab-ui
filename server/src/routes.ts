@@ -58,7 +58,7 @@ function act<P>(action: string, target: (req: Req) => string, fn: (req: Req, bod
 type P = { namespace: string; name: string };
 
 export function registerRoutes(app: FastifyInstance) {
-  app.get('/api/me', async (req) => ({ user: (req as Req).user, config: { appsNamespace: config.appsNamespace, publicDomain: config.publicDomain, internalDomain: config.internalDomain, storageClass: config.storageClass, dbStorageClass: config.dbStorageClass, githubOwner: config.githubOwner } }));
+  app.get('/api/me', async (req) => ({ user: (req as Req).user, config: { appsNamespace: config.appsNamespace, publicDomain: config.publicDomain, internalDomain: config.internalDomain, storageClass: config.storageClass, dbStorageClass: config.dbStorageClass, githubOwner: config.githubOwner, links: config.links } }));
 
   app.get('/api/health', async () => ({
     namespaces: cache.list('namespaces').map((n) => n.metadata.name),

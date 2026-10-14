@@ -1,7 +1,7 @@
 import { Link } from 'react-router';
 import { appPath } from '../api';
 import { useLive } from '../live';
-import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, Meter, StatusBadge } from '../ui';
+import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, Meter, StatusBadge, useNativeLinks } from '../ui';
 
 export function Dashboard() {
   const apps = useLive((s) => s.apps);
@@ -9,6 +9,7 @@ export function Dashboard() {
   const cluster = useLive((s) => s.cluster);
   const pve = useLive((s) => s.proxmox);
   const tn = useLive((s) => s.truenas);
+  const links = useNativeLinks();
   const builds = useLive((s) => Object.values(s.builds).sort((a, b) => b.at - a.at).slice(0, 4));
 
   const failing = apps.filter((a) => a.status === 'failed' || a.status === 'degraded');
@@ -60,7 +61,7 @@ export function Dashboard() {
           </ul>
         </Card>
 
-        <Card title="Cluster" actions={<Link to="/cluster">Nodes →</Link>}>
+        <Card title="Cluster" actions={<span className="btn-row small"><Link to="/cluster">Nodes →</Link>{links.rancher && <a href={links.rancher} target="_blank" rel="noreferrer">Rancher ↗</a>}</span>}>
           {!cluster?.nodes.length && <Empty>{cluster?.watch.nodes?.error ?? 'Loading nodes…'}</Empty>}
           <ul className="list">
             {cluster?.nodes.map((n) => (
@@ -75,7 +76,7 @@ export function Dashboard() {
           </ul>
         </Card>
 
-        <Card title="Proxmox" actions={<Link to="/proxmox">Open →</Link>}>
+        <Card title="Proxmox" actions={<span className="btn-row small"><Link to="/proxmox">Open →</Link>{links.proxmox && <a href={links.proxmox} target="_blank" rel="noreferrer">Proxmox ↗</a>}</span>}>
           {!pve?.connected ? (
             <Empty>{pve?.error ?? 'Loading…'}</Empty>
           ) : (
@@ -93,7 +94,7 @@ export function Dashboard() {
           )}
         </Card>
 
-        <Card title="TrueNAS" actions={<Link to="/truenas">Open →</Link>}>
+        <Card title="TrueNAS" actions={<span className="btn-row small"><Link to="/truenas">Open →</Link>{links.truenas && <a href={links.truenas} target="_blank" rel="noreferrer">TrueNAS ↗</a>}</span>}>
           {!tn?.connected ? (
             <Empty>{tn?.error ?? 'Loading…'}</Empty>
           ) : (

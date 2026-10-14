@@ -1,6 +1,7 @@
 // Shared building blocks: badges, meters, problem cards, dialogs, toasts and formatters.
 import { createContext, ReactNode, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { ApiError } from './api';
+import { useQuery } from '@tanstack/react-query';
+import { ApiError, get } from './api';
 import type { AppStatus, Problem } from './types';
 
 // ---- Formatters -----------------------------------------------------------------------------
@@ -272,5 +273,20 @@ export function CopyText({ text }: { text: string }) {
     >
       {done ? '✓' : '⧉'}
     </button>
+  );
+}
+
+// Links to the native UIs (Rancher, Proxmox, TrueNAS), configured server-side.
+export function useNativeLinks(): { rancher?: string; proxmox?: string; truenas?: string } {
+  const q = useQuery({ queryKey: ['me'], queryFn: () => get('/me'), staleTime: Infinity });
+  return q.data?.config?.links ?? {};
+}
+
+export function NativeLink({ href, children }: { href?: string; children: ReactNode }) {
+  if (!href) return null;
+  return (
+    <a className="btn" href={href} target="_blank" rel="noreferrer">
+      {children} ↗
+    </a>
   );
 }

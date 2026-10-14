@@ -52,6 +52,12 @@ export const config = {
 
   // Wildcard certificate Secret for *.<internalDomain>, copied into namespaces with Internal routes.
   lanTlsSecret: env.LAN_TLS_SECRET ?? 'lan-wildcard-tls',
+  // Native UIs, linked from each section (reached over Tailscale via the LAN gateway).
+  links: {
+    rancher: env.RANCHER_URL ?? 'https://rancher.lan.howellsas.com',
+    proxmox: env.PROXMOX_UI_URL ?? 'https://proxmox.lan.howellsas.com',
+    truenas: env.TRUENAS_UI_URL ?? 'https://truenas.lan.howellsas.com',
+  },
   githubOwner: env.GITHUB_OWNER ?? 'chevvyy',
   proxmoxPollMs: Number(env.PROXMOX_POLL_MS ?? 5000),
 };

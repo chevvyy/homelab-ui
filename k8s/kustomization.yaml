@@ -8,6 +8,7 @@ resources:
   - tailscale-config.yaml
   - controller.yaml
   - lan-gateway.yaml
+  - native-uis.yaml
 images:
   - name: ghcr.io/chevvyy/homelab-ui
-    newTag: "0.1.4"
+    newTag: "0.1.5"

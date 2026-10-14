@@ -4,13 +4,14 @@ import { Link, useSearchParams } from 'react-router';
 import { get, post } from '../api';
 import { useLive } from '../live';
 import type { PveGuest } from '../types';
-import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, fmtUptime, Meter, Modal, Spinner, useAction, useConfirm } from '../ui';
+import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, fmtUptime, Meter, Modal, NativeLink, Spinner, useAction, useConfirm, useNativeLinks } from '../ui';
 
 export function Proxmox() {
   const pve = useLive((s) => s.proxmox);
   const [params, setParams] = useSearchParams();
   const [filter, setFilter] = useState('');
   const selected = params.get('vm');
+  const links = useNativeLinks();
   if (!pve) return <div className="page"><h1>Proxmox</h1><Empty>Loading…</Empty></div>;
   if (!pve.configured) return <div className="page"><h1>Proxmox</h1><Empty>Proxmox is not connected yet. <Link to="/settings">Add it in Settings</Link>.</Empty></div>;
 
@@ -21,7 +22,10 @@ export function Proxmox() {
     <div className="page">
       <div className="page-head">
         <h1>Proxmox {pve.version && <span className="muted small">VE {pve.version}</span>}</h1>
-        {pve.lastUpdate && <span className="muted small">updated {fmtAgo(pve.lastUpdate)} ago</span>}
+        <div className="btn-row">
+          {pve.lastUpdate && <span className="muted small">updated {fmtAgo(pve.lastUpdate)} ago</span>}
+          <NativeLink href={links.proxmox}>Open Proxmox</NativeLink>
+        </div>
       </div>
       {!pve.connected && <div className="banner banner-bad">Disconnected: {pve.error}. Showing the last known state; retrying.</div>}
       <div className="grid-2">
@@ -82,6 +86,10 @@ function GuestModal({ g, onClose }: { g: PveGuest; onClose: () => void }) {
   const [snapName, setSnapName] = useState('');
   const snaps = useQuery({ queryKey: ['snaps', g.vmid], queryFn: () => get<{ name: string; description: string; time?: number }[]>(`/proxmox/guests/${g.vmid}/snapshots`) });
   const running = g.status === 'running';
+  const links = useNativeLinks();
+  const consoleUrl = links.proxmox
+    ? `${links.proxmox}/?console=${g.type === 'qemu' ? 'kvm' : 'lxc'}&novnc=1&vmid=${g.vmid}&vmname=${encodeURIComponent(g.name)}&node=${encodeURIComponent(g.node)}&resize=off&cmd=`
+    : undefined;
 
   const power = async (action: 'start' | 'shutdown' | 'stop' | 'reboot') => {
     if (action !== 'start') {
@@ -108,6 +116,8 @@ function GuestModal({ g, onClose }: { g: PveGuest; onClose: () => void }) {
           {running && <button className="btn" disabled={!!busy} onClick={() => power('shutdown')}>Shut down</button>}
           {running && <button className="btn" disabled={!!busy} onClick={() => power('reboot')}>Reboot</button>}
           {running && <button className="btn btn-danger-outline" disabled={!!busy} onClick={() => power('stop')}>Force stop</button>}
+          {running && <NativeLink href={consoleUrl}>Console</NativeLink>}
+          <NativeLink href={links.proxmox ? `${links.proxmox}/#v1:0:=${g.type}%2F${g.vmid}:4:::::::` : undefined}>Open in Proxmox</NativeLink>
         </div>
       )}
       <h3>Snapshots</h3>

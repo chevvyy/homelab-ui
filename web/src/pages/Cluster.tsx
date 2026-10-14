@@ -1,10 +1,11 @@
 import { Link } from 'react-router';
 import { useLive } from '../live';
-import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, Meter } from '../ui';
+import { Card, Dot, Empty, fmtAgo, fmtBytes, fmtPct, Meter, NativeLink, useNativeLinks } from '../ui';
 
 export function Cluster() {
   const cluster = useLive((s) => s.cluster);
   const apps = useLive((s) => s.apps);
+  const links = useNativeLinks();
   if (!cluster) return <div className="page"><h1>Cluster</h1><Empty>Loading…</Empty></div>;
   const watchErrors = Object.entries(cluster.watch).filter(([, w]) => w.error);
   const byNs = new Map<string, number>();
@@ -12,7 +13,10 @@ export function Cluster() {
 
   return (
     <div className="page">
-      <h1>Cluster</h1>
+      <div className="page-head">
+        <h1>Cluster</h1>
+        <NativeLink href={links.rancher}>Open Rancher</NativeLink>
+      </div>
       {watchErrors.length > 0 && (
         <div className="banner banner-warn">
           Some resources can't be watched: {watchErrors.map(([k, w]) => `${k} (${w.error})`).join('; ')}

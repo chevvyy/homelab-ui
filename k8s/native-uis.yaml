@@ -1,0 +1,86 @@
+# Native UIs over Tailscale with trusted HTTPS (*.lan wildcard cert):
+#   https://proxmox.lan.howellsas.com  -> Proxmox VE   192.168.0.36:8006 (self-signed upstream)
+#   https://truenas.lan.howellsas.com  -> TrueNAS      192.168.0.215:443 (self-signed upstream)
+#   https://rancher.lan.howellsas.com  -> Rancher      cattle-system/rancher (via its ClusterIP)
+# Path: tailnet -> lan-gateway -> Traefik (websecure) -> selector-less Service + Endpoints below.
+apiVersion: traefik.io/v1alpha1
+kind: ServersTransport
+metadata:
+  name: self-signed-upstream
+spec:
+  insecureSkipVerify: true
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: homelab-https-redirect
+spec:
+  redirectScheme: {scheme: https, permanent: true}
+---
+apiVersion: v1
+kind: Service
+metadata: {name: proxmox-ui}
+spec:
+  ports: [{name: https, port: 8006, targetPort: 8006}]
+---
+apiVersion: v1
+kind: Endpoints
+metadata: {name: proxmox-ui}
+subsets:
+  - addresses: [{ip: 192.168.0.36}]
+    ports: [{name: https, port: 8006}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: truenas-ui}
+spec:
+  ports: [{name: https, port: 443, targetPort: 443}]
+---
+apiVersion: v1
+kind: Endpoints
+metadata: {name: truenas-ui}
+subsets:
+  - addresses: [{ip: 192.168.0.215}]
+    ports: [{name: https, port: 443}]
+---
+# Rancher lives in cattle-system; Traefik won't route across namespaces, so point at its ClusterIP.
+apiVersion: v1
+kind: Service
+metadata: {name: rancher-ui}
+spec:
+  ports: [{name: http, port: 80, targetPort: 80}]
+---
+apiVersion: v1
+kind: Endpoints
+metadata: {name: rancher-ui}
+subsets:
+  - addresses: [{ip: 10.43.111.121}]
+    ports: [{name: http, port: 80}]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: native-uis}
+spec:
+  entryPoints: [websecure]
+  tls: {secretName: lan-wildcard-tls}
+  routes:
+    - match: Host(`proxmox.lan.howellsas.com`)
+      kind: Rule
+      services: [{name: proxmox-ui, port: 8006, scheme: https, serversTransport: self-signed-upstream}]
+    - match: Host(`truenas.lan.howellsas.com`)
+      kind: Rule
+      services: [{name: truenas-ui, port: 443, scheme: https, serversTransport: self-signed-upstream}]
+    - match: Host(`rancher.lan.howellsas.com`)
+      kind: Rule
+      services: [{name: rancher-ui, port: 80}]
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata: {name: native-uis-http}
+spec:
+  entryPoints: [web]
+  routes:
+    - match: Host(`proxmox.lan.howellsas.com`) || Host(`truenas.lan.howellsas.com`) || Host(`rancher.lan.howellsas.com`)
+      kind: Rule
+      middlewares: [{name: homelab-https-redirect}]
+      services: [{name: proxmox-ui, port: 8006}]
