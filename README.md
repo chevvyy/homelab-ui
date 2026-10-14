@@ -2,7 +2,9 @@
 
 One web UI for the homelab: watch the k3s cluster, Proxmox and TrueNAS live, and deploy and manage
 apps on k3s from a container image, a GitHub repo or pasted YAML. Reachable only over Tailscale at
-`http://controller.howellsas.com`; you sign in with your Tailscale identity (no password).
+`https://controller.howellsas.com`; you sign in with your Tailscale identity (no password).
+
+**New here?** [docs/FILES.md](docs/FILES.md) explains every file and folder in one page.
 
 Rancher still covers cluster administration; this covers day-to-day deploys and monitoring.
 
@@ -17,6 +19,7 @@ Rancher still covers cluster administration; this covers day-to-day deploys and 
 | Links | Link app A to B: A gets `B_URL`, `B_HOST`, `B_PORT` and restarts; deleting B warns about A |
 | Proxmox | Nodes, VMs and LXCs live; start, shut down, reboot, force stop; snapshots |
 | TrueNAS | Pools, datasets, live alerts (view only) |
+| Native UIs | Buttons to Rancher, Proxmox and TrueNAS at `https://{rancher,proxmox,truenas}.lan.howellsas.com` (Tailscale only) |
 | Other | Dashboard, Ctrl+K palette (`restart <app>`), phone layout, audit log, nightly SQLite backup to the NAS |
 
 ## Architecture
@@ -49,6 +52,7 @@ Public apps:   browser ──▶ Cloudflare ──tunnel──▶ Traefik ──
    * `github`: `token` (fine-grained: Contents, Actions, Workflows, Administration read/write;
      Metadata read)
    * `tailscale-auth`: `TS_AUTHKEY` (reusable, pre-approved, tag `tag:homelab-ui`)
+   * `cloudflare-dns`: `api-token` (Cloudflare "Edit zone DNS" for howellsas.com; used for Let's Encrypt)
    * `ghcr`: image pull secret (copied from an existing namespace)
 3. **Deploy**: `kubectl apply -k k8s/`
 4. **DNS** (Cloudflare, DNS only, not proxied):
