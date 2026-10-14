@@ -165,3 +165,4 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   (TLS after PROXY header, cert reloaded on change), :80 → 308 to https. Internal routes: websecure + tls lan-wildcard-tls
   (copied per ns by k8s/lantls.ts, resynced 6h) + `<app>-route-http` redirect via Middleware homelab-https-redirect.
   Verified: trusted TLS on controller, internal app 200 over https (trusted), http→https 301.
+- 2026-10-14: user confirmed *.home.howellsas.com = home only → PRIVATE_DOMAINS (display as internal/'Home only').

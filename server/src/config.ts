@@ -41,6 +41,8 @@ export const config = {
 
   publicDomain: env.PUBLIC_DOMAIN ?? 'howellsas.com',
   internalDomain: env.INTERNAL_DOMAIN ?? 'lan.howellsas.com',
+  // Other domains that are only reachable from home / the tailnet (existing routes, display only).
+  privateDomains: list(env.PRIVATE_DOMAINS ?? 'home.howellsas.com'),
   // cloudflared reaches Traefik on :80, so public routes use the "web" entrypoint too (verified).
   publicEntrypoint: env.PUBLIC_ENTRYPOINT ?? 'web',
   internalEntrypoint: env.INTERNAL_ENTRYPOINT ?? 'web',

@@ -262,11 +262,11 @@ function Exposure({ app }: { app: AppSummary }) {
       {app.hosts.length > 0 && (
         <ul className="list small">
           {app.hosts.map((h) => {
-            const url = `${h.exposure === 'internal' ? 'http' : 'https'}://${h.host}`;
+            const url = `${h.via === 'IngressRoute' && h.managed && h.exposure === 'internal' ? 'https' : h.exposure === 'public' ? 'https' : 'http'}://${h.host}`;
             return (
               <li key={h.host + h.object} className="host-row">
                 <a href={url} target="_blank" rel="noreferrer">{h.host}</a>
-                <span className="muted">{h.exposure} · {h.via} {h.object}</span>
+                <span className="muted">{h.exposure === 'internal' ? (h.host.endsWith('.lan.howellsas.com') ? 'internal (Tailscale)' : 'home only') : h.exposure} · {h.via} {h.object}</span>
                 <CopyText text={url} />
               </li>
             );

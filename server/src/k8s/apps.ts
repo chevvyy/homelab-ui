@@ -76,7 +76,7 @@ function selectorMatches(selector: Record<string, string> | undefined, labels: R
 }
 
 export function hostExposure(host: string): HostSummary['exposure'] {
-  if (host.endsWith(`.${config.internalDomain}`)) return 'internal';
+  if (host.endsWith(`.${config.internalDomain}`) || config.privateDomains.some((d) => host === d || host.endsWith(`.${d}`))) return 'internal';
   if (host === config.publicDomain || host.endsWith(`.${config.publicDomain}`)) return 'public';
   return 'other';
 }

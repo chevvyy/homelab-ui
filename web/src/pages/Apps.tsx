@@ -10,7 +10,9 @@ const SYSTEM = /^(kube-|cattle-|fleet-|cluster-fleet-|local$|p-)/;
 function ExposureTag({ a }: { a: AppSummary }) {
   if (a.exposure === 'public') return <span className="tag tag-public">Public</span>;
   if (a.exposure === 'internal') return <span className="tag tag-internal">Internal</span>;
-  if (a.hosts.length) return <span className="tag">{a.hosts.some((h) => h.exposure === 'public') ? 'Routed' : 'Routed (other)'}</span>;
+  if (a.hosts.some((h) => h.exposure === 'public')) return <span className="tag tag-public" title="Routed by its own Ingress">Public</span>;
+  if (a.hosts.some((h) => h.exposure === 'internal')) return <span className="tag tag-internal" title="Routed by its own Ingress">Home only</span>;
+  if (a.hosts.length) return <span className="tag">Routed</span>;
   return null;
 }
 
