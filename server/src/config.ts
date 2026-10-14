@@ -11,6 +11,11 @@ export const config = {
   // client and prefixes every connection with a PROXY v1 header.
   uiHost: env.UI_HOST ?? '127.0.0.1',
   uiPort: Number(env.UI_PORT ?? 3000),
+  // HTTPS listener (also PROXY-prefixed). Enabled when TLS_CERT and TLS_KEY point at files;
+  // the plain listener then only redirects to https://.
+  tlsPort: Number(env.TLS_PORT ?? 3443),
+  tlsCert: env.TLS_CERT ?? '',
+  tlsKey: env.TLS_KEY ?? '',
   // Probe listener (/healthz only), reachable by the kubelet.
   healthPort: Number(env.HEALTH_PORT ?? 8081),
 
@@ -43,6 +48,8 @@ export const config = {
   storageClass: env.STORAGE_CLASS ?? 'nfs-bulk',
   dbStorageClass: env.DB_STORAGE_CLASS ?? 'local-path',
 
+  // Wildcard certificate Secret for *.<internalDomain>, copied into namespaces with Internal routes.
+  lanTlsSecret: env.LAN_TLS_SECRET ?? 'lan-wildcard-tls',
   githubOwner: env.GITHUB_OWNER ?? 'chevvyy',
   proxmoxPollMs: Number(env.PROXMOX_POLL_MS ?? 5000),
 };

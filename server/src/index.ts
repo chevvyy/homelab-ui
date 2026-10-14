@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync, statSync } from 'node:fs';
+import tls from 'node:tls';
 import { readdir, rm } from 'node:fs/promises';
 import http from 'node:http';
 import { join, resolve } from 'node:path';
@@ -9,6 +10,7 @@ import { identify, proxyProtocolListener } from './auth.js';
 import { config } from './config.js';
 import { backupTo, failInterruptedBuilds } from './db.js';
 import { cache } from './k8s/cache.js';
+import { startLanCertSync } from './k8s/lantls.js';
 import { metrics } from './k8s/nodes.js';
 import { registerRoutes } from './routes.js';
 import { proxmox } from './systems/proxmox.js';
@@ -17,9 +19,29 @@ import { registerRealtime } from './ws.js';
 
 const app = Fastify({ logger: { level: process.env.LOG_LEVEL ?? 'info' }, bodyLimit: 2 * 1024 * 1024 });
 
+let tlsEnabled = false;
+const tlsConfigured = !!(config.tlsCert && config.tlsKey);
+
+// cert-manager renews the certificate in place; reload it when the file changes.
+let tlsContext: tls.SecureContext | undefined;
+let tlsMtime = 0;
+function secureContext(): tls.SecureContext {
+  const m = statSync(config.tlsCert).mtimeMs;
+  if (!tlsContext || m !== tlsMtime) {
+    tlsContext = tls.createSecureContext({ cert: readFileSync(config.tlsCert), key: readFileSync(config.tlsKey) });
+    tlsMtime = m;
+  }
+  return tlsContext;
+}
+
 // Every request (including WebSocket upgrades) must come from a signed-in Tailscale user.
 app.decorateRequest('user', null);
 app.addHook('onRequest', async (req, reply) => {
+  // With TLS on, the plain listener only redirects.
+  if (tlsEnabled && !(req.raw.socket as tls.TLSSocket).encrypted) {
+    const host = (req.headers.host ?? '').replace(/:\d+$/, '');
+    return reply.redirect(`https://${host}${req.url}`, 308);
+  }
   const { identity, reason } = await identify(req.raw.socket);
   if (!identity) {
     if (req.url.startsWith('/api/')) return reply.code(401).send({ error: { title: 'Not signed in', cause: reason } });
@@ -49,13 +71,27 @@ const interrupted = failInterruptedBuilds();
 if (interrupted) app.log.warn(`${interrupted} unfinished GitHub deploy(s) marked failed after restart`);
 cache.start();
 metrics.start();
+startLanCertSync();
 void proxmox.start();
 void truenas.start();
 
-// UI listener: loopback only in production (the Tailscale sidecar is the only client).
+// UI listeners: loopback only in production (the Tailscale sidecar is the only client).
 proxyProtocolListener(app.server).listen(config.uiPort, config.uiHost, () => {
   app.log.info(`UI listening on ${config.uiHost}:${config.uiPort} (auth: ${config.authMode})`);
 });
+// The certificate Secret may be issued after the pod starts; begin serving HTTPS (and
+// redirecting HTTP) as soon as it appears.
+const startTls = () => {
+  if (tlsEnabled || !tlsConfigured || !existsSync(config.tlsCert) || !existsSync(config.tlsKey)) return;
+  tlsEnabled = true;
+  proxyProtocolListener(app.server, secureContext).listen(config.tlsPort, config.uiHost, () => {
+    app.log.info(`HTTPS listening on ${config.uiHost}:${config.tlsPort}; plain HTTP now redirects`);
+  });
+};
+startTls();
+if (tlsConfigured && !tlsEnabled) {
+  const t = setInterval(() => (startTls(), tlsEnabled && clearInterval(t)), 30_000);
+}
 
 // Probe listener: no auth, no data.
 http

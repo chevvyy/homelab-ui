@@ -8,8 +8,19 @@ import { appObjects, buildApps, Exposure } from './apps.js';
 import { cache } from './cache.js';
 import { FIELD_MANAGER, K8sError, R, request, resourcePath } from './client.js';
 import { LABEL_APP, LABEL_EXPOSURE, LABEL_MANAGED } from './labels.js';
+import { ensureLanCert } from './lantls.js';
 
 const HOST_RE = /^(?=.{1,253}$)([a-z0-9]([-a-z0-9]{0,61}[a-z0-9])?\.)+[a-z]{2,}$/;
+
+const REDIRECT_MW = 'homelab-https-redirect';
+
+async function ensureRedirectMiddleware(namespace: string) {
+  await request('PATCH', resourcePath(R.middlewares, namespace, REDIRECT_MW), {
+    contentType: 'application/apply-patch+yaml',
+    query: { fieldManager: FIELD_MANAGER, force: true },
+    body: { apiVersion: 'traefik.io/v1alpha1', kind: 'Middleware', metadata: { name: REDIRECT_MW, namespace, labels: { [LABEL_MANAGED]: 'true' } }, spec: { redirectScheme: { scheme: 'https', permanent: true } } },
+  });
+}
 
 export function defaultHost(app: string, mode: Exclude<Exposure, 'off'>): string {
   return mode === 'public' ? `${app}.${config.publicDomain}` : `${app}.${config.internalDomain}`;
@@ -46,7 +57,6 @@ export async function setExposure(namespace: string, app: string, mode: Exposure
   }
   if (!objs) throw new ActionError('App not found.', 404);
   const routeName = `${app}-route`;
-  const routePath = resourcePath(R.ingressroutes, namespace, routeName);
 
   if (mode === 'off') {
     // Remove every route the controller made for this app.
@@ -67,20 +77,27 @@ export async function setExposure(namespace: string, app: string, mode: Exposure
   if (mode === 'internal' && !isInternal) throw new ActionError(`Internal hostnames must end in .${config.internalDomain}.`, 422);
   if (mode === 'public' && isInternal) throw new ActionError(`.${config.internalDomain} names are internal-only; pick a different public name.`, 422);
 
-  const body = {
-    apiVersion: 'traefik.io/v1alpha1',
-    kind: 'IngressRoute',
-    metadata: { name: routeName, namespace, labels: { [LABEL_APP]: app, [LABEL_MANAGED]: 'true', [LABEL_EXPOSURE]: mode } },
-    spec: {
-      entryPoints: [mode === 'public' ? config.publicEntrypoint : config.internalEntrypoint],
-      routes: [{ match: `Host(\`${host}\`)`, kind: 'Rule', services: [{ name: svc.metadata.name, port }] }],
-    },
-  };
+  const labels = { [LABEL_APP]: app, [LABEL_MANAGED]: 'true', [LABEL_EXPOSURE]: mode };
+  const backend = [{ name: svc.metadata.name, port }];
+  const apply = (name: string, body: unknown) =>
+    request('PATCH', resourcePath(R.ingressroutes, namespace, name), { contentType: 'application/apply-patch+yaml', query: { fieldManager: FIELD_MANAGER, force: true }, body });
+  const route = (name: string, spec: unknown) => ({ apiVersion: 'traefik.io/v1alpha1', kind: 'IngressRoute', metadata: { name, namespace, labels }, spec });
+  const match = `Host(\`${host}\`)`;
+  // Internal: HTTPS on websecure with the *.lan wildcard certificate, plus an http -> https
+  // redirect. Public: Cloudflare terminates TLS and the tunnel reaches Traefik on "web".
+  const lanCert = mode === 'internal' ? await ensureLanCert(namespace) : undefined;
   try {
-    await request('PATCH', routePath, { contentType: 'application/apply-patch+yaml', query: { fieldManager: FIELD_MANAGER, force: true }, body });
+    if (lanCert) {
+      await apply(routeName, route(routeName, { entryPoints: ['websecure'], routes: [{ match, kind: 'Rule', services: backend }], tls: { secretName: lanCert } }));
+      await ensureRedirectMiddleware(namespace);
+      await apply(`${routeName}-http`, route(`${routeName}-http`, { entryPoints: [config.internalEntrypoint], routes: [{ match, kind: 'Rule', middlewares: [{ name: REDIRECT_MW }], services: backend }] }));
+    } else {
+      await apply(routeName, route(routeName, { entryPoints: [mode === 'public' ? config.publicEntrypoint : config.internalEntrypoint], routes: [{ match, kind: 'Rule', services: backend }] }));
+      await request('DELETE', resourcePath(R.ingressroutes, namespace, `${routeName}-http`)).catch(() => undefined);
+    }
   } catch (e) {
     if (e instanceof K8sError && e.status === 404) throw new ActionError('Traefik IngressRoute CRDs are not available in this cluster.', 500);
     throw e;
   }
-  return { mode, host, url: `${mode === 'public' ? 'https' : 'http'}://${host}` };
+  return { mode, host, url: `${mode === 'public' || lanCert ? 'https' : 'http'}://${host}` };
 }

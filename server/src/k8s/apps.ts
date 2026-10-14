@@ -213,6 +213,7 @@ export function buildApps(): AppSummary[] {
       if (!rules.length) continue;
       appRoutes.push(r);
       for (const host of new Set(rules.flatMap((rule) => rule.hosts))) {
+        if (hosts.some((h) => h.host === host)) continue; // e.g. an https route plus its http redirect
         hosts.push({ host, exposure: hostExposure(host), via: r.kind as 'Ingress' | 'IngressRoute', object: r.metadata.name, managed: !!r.metadata.labels?.[LABEL_EXPOSURE] });
       }
     }

@@ -4,9 +4,10 @@ namespace: homelab-ui
 # bootstrap/ (namespaces + RBAC) is applied once by the cluster owner, not by this kustomization.
 resources:
   - storage.yaml
+  - certificates.yaml
   - tailscale-config.yaml
   - controller.yaml
   - lan-gateway.yaml
 images:
   - name: ghcr.io/chevvyy/homelab-ui
-    newTag: "0.1.1"
+    newTag: "0.1.2"

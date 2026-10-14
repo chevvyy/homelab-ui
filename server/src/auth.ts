@@ -4,6 +4,7 @@
 // Nothing but the sidecar can reach the loopback listener, so the header cannot be forged.
 import http from 'node:http';
 import net from 'node:net';
+import tls from 'node:tls';
 import { config } from './config.js';
 
 export interface Identity {
@@ -21,12 +22,24 @@ declare module 'node:net' {
 
 const MAX_HEADER = 108; // PROXY v1 maximum line length
 
-// Accepts raw TCP, strips the PROXY header, then hands the socket to the HTTP server.
-export function proxyProtocolListener(server: http.Server): net.Server {
-  return net.createServer({ pauseOnConnect: true }, (socket) => {
-    if (config.authMode === 'dev') {
+// Accepts raw TCP, strips the PROXY header, then hands the socket to the HTTP server. With
+// getContext, the stream after the header is TLS and is decrypted here first.
+export function proxyProtocolListener(server: http.Server, getContext?: () => tls.SecureContext): net.Server {
+  const hand = (socket: net.Socket) => {
+    if (!getContext) {
       server.emit('connection', socket);
       socket.resume();
+      return;
+    }
+    const secure = new tls.TLSSocket(socket, { isServer: true, secureContext: getContext(), ALPNProtocols: ['http/1.1'] });
+    secure.tsPeer = socket.tsPeer;
+    secure.on('error', () => socket.destroy());
+    server.emit('connection', secure);
+    socket.resume();
+  };
+  return net.createServer({ pauseOnConnect: true }, (socket) => {
+    if (config.authMode === 'dev') {
+      hand(socket);
       return;
     }
     let buf = Buffer.alloc(0);
@@ -48,8 +61,7 @@ export function proxyProtocolListener(server: http.Server): net.Server {
       socket.tsPeer = { ip: m[2], port: Number(m[4]) };
       const rest = buf.subarray(end + 2);
       if (rest.length) socket.unshift(rest);
-      server.emit('connection', socket);
-      socket.resume();
+      hand(socket);
     };
     socket.on('data', onData);
     socket.on('error', () => socket.destroy());

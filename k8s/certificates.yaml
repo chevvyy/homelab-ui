@@ -1,0 +1,33 @@
+# Let's Encrypt via DNS-01 on Cloudflare (token in Secret cloudflare-dns, key api-token).
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: letsencrypt
+spec:
+  acme:
+    server: https://acme-v02.api.letsencrypt.org/directory
+    privateKeySecretRef: {name: letsencrypt-account}
+    solvers:
+      - dns01:
+          cloudflare:
+            apiTokenSecretRef: {name: cloudflare-dns, key: api-token}
+---
+# The controller's own address.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: controller-tls
+spec:
+  secretName: controller-tls
+  issuerRef: {name: letsencrypt, kind: Issuer}
+  dnsNames: [controller.howellsas.com]
+---
+# Internal apps. The controller copies this Secret into each namespace with an Internal route.
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: lan-wildcard-tls
+spec:
+  secretName: lan-wildcard-tls
+  issuerRef: {name: letsencrypt, kind: Issuer}
+  dnsNames: ["*.lan.howellsas.com"]

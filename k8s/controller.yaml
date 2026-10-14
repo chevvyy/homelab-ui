@@ -41,6 +41,8 @@ spec:
             - {name: BACKUP_DIR, value: /backup}
             - {name: TS_SOCKET, value: /var/run/tailscale/tailscaled.sock}
             - {name: AUTH_MODE, value: tailscale}
+            - {name: TLS_CERT, value: /tls/tls.crt}
+            - {name: TLS_KEY, value: /tls/tls.key}
             # Comma-separated Tailscale logins allowed in; empty = any user-owned device on the tailnet.
             - {name: ALLOWED_LOGINS, value: ""}
             - {name: TZ, value: America/Chicago}
@@ -58,6 +60,7 @@ spec:
             - {name: backup, mountPath: /backup}
             - {name: ts-socket, mountPath: /var/run/tailscale}
             - {name: tmp, mountPath: /tmp}
+            - {name: tls, mountPath: /tls, readOnly: true}
           securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
           resources:
             requests: {cpu: 50m, memory: 192Mi}
@@ -103,3 +106,6 @@ spec:
           emptyDir: {}
         - name: serve-config
           configMap: {name: tailscale-serve}
+        # Issued by cert-manager (certificates.yaml); optional so the pod starts before issuance.
+        - name: tls
+          secret: {secretName: controller-tls, optional: true}

@@ -4,10 +4,12 @@ kind: ConfigMap
 metadata:
   name: tailscale-serve
 data:
-  # Controller: tailnet :80 -> UI on loopback, prefixed with a PROXY v1 header so the controller
-  # can ask Tailscale (whois) who is connecting.
+  # Controller: tailnet :443 (TLS, terminated by the controller) and :80 (redirects to https),
+  # each prefixed with a PROXY v1 header so the controller can ask Tailscale (whois) who is
+  # connecting.
   controller.json: |
-    {"TCP": {"80": {"TCPForward": "127.0.0.1:3000", "ProxyProtocol": 1}}}
-  # LAN gateway: tailnet :80 -> Traefik, which routes *.lan.howellsas.com to Internal apps.
+    {"TCP": {"80": {"TCPForward": "127.0.0.1:3000", "ProxyProtocol": 1}, "443": {"TCPForward": "127.0.0.1:3443", "ProxyProtocol": 1}}}
+  # LAN gateway: tailnet :80/:443 -> Traefik, which routes *.lan.howellsas.com to Internal apps
+  # (TLS with the *.lan wildcard certificate on 443; 80 redirects).
   lan-gateway.json: |
-    {"TCP": {"80": {"TCPForward": "traefik.kube-system.svc.cluster.local:80"}}}
+    {"TCP": {"80": {"TCPForward": "traefik.kube-system.svc.cluster.local:80"}, "443": {"TCPForward": "traefik.kube-system.svc.cluster.local:443"}}}

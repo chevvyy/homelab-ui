@@ -156,3 +156,7 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   Leftovers on GitHub: test repo chevvyy/hlui-e2e, GHCR packages hlui-e2e + traefik-whoami (user may delete).
 - PENDING USER: Cloudflare DNS (controller A 100.65.27.122, *.lan A 100.107.42.126, DNS only), secret rotation, answers on
   *.home.howellsas.com and share-app migration. Then: real-browser login check (needs user), share-app migration if yes.
+- 2026-10-14: User reports "Google is blocking" controller site on PC → most likely Chrome's default "Always use secure
+  connections" warning for http://. Proposed HTTPS: (A, recommended) Let's Encrypt DNS-01 via Cloudflare token + cert-manager
+  Issuer in homelab-ui (bootstrap updated with cert-manager.io rules; user must re-apply), controller terminates TLS after the
+  PROXY header, *.lan wildcard cert for Internal apps; or (B) Tailscale HTTPS on controller.<tailnet>.ts.net. Awaiting choice.
