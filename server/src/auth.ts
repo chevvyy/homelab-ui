@@ -4,6 +4,7 @@
 // Nothing but the sidecar can reach the loopback listener, so the header cannot be forged.
 import http from 'node:http';
 import net from 'node:net';
+import { Duplex } from 'node:stream';
 import tls from 'node:tls';
 import { config } from './config.js';
 
@@ -25,13 +26,40 @@ const MAX_HEADER = 108; // PROXY v1 maximum line length
 // Accepts raw TCP, strips the PROXY header, then hands the socket to the HTTP server. With
 // getContext, the stream after the header is TLS and is decrypted here first.
 export function proxyProtocolListener(server: http.Server, getContext?: () => tls.SecureContext): net.Server {
-  const hand = (socket: net.Socket) => {
+  // `rest` = bytes that arrived in the same read as the PROXY header.
+  const hand = (socket: net.Socket, rest: Buffer = Buffer.alloc(0)) => {
     if (!getContext) {
+      if (rest.length) socket.unshift(rest);
       server.emit('connection', socket);
       socket.resume();
       return;
     }
-    const secure = new tls.TLSSocket(socket, { isServer: true, secureContext: getContext(), ALPNProtocols: ['http/1.1'] });
+    // Node's TLS reads straight from the socket's native handle and would never see bytes we
+    // already consumed (often the ClientHello arrives with the PROXY header), so feed it through
+    // a JS stream that starts with those bytes.
+    const stream = new Duplex({
+      read() {
+        socket.resume();
+      },
+      write(chunk, encoding, cb) {
+        socket.write(chunk, encoding, cb);
+      },
+      final(cb) {
+        socket.end();
+        cb();
+      },
+      destroy(err, cb) {
+        socket.destroy();
+        cb(err);
+      },
+    });
+    if (rest.length) stream.push(rest);
+    socket.on('data', (d) => {
+      if (!stream.push(d)) socket.pause();
+    });
+    socket.on('end', () => stream.push(null));
+    socket.on('close', () => stream.destroy());
+    const secure = new tls.TLSSocket(stream as unknown as net.Socket, { isServer: true, secureContext: getContext(), ALPNProtocols: ['http/1.1'] });
     secure.tsPeer = socket.tsPeer;
     secure.on('error', () => socket.destroy());
     server.emit('connection', secure);
@@ -59,9 +87,7 @@ export function proxyProtocolListener(server: http.Server, getContext?: () => tl
         return;
       }
       socket.tsPeer = { ip: m[2], port: Number(m[4]) };
-      const rest = buf.subarray(end + 2);
-      if (rest.length) socket.unshift(rest);
-      hand(socket);
+      hand(socket, buf.subarray(end + 2));
     };
     socket.on('data', onData);
     socket.on('error', () => socket.destroy());

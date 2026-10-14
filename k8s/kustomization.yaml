@@ -10,4 +10,4 @@ resources:
   - lan-gateway.yaml
 images:
   - name: ghcr.io/chevvyy/homelab-ui
-    newTag: "0.1.3"
+    newTag: "0.1.4"
