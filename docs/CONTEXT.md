@@ -160,3 +160,8 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   connections" warning for http://. Proposed HTTPS: (A, recommended) Let's Encrypt DNS-01 via Cloudflare token + cert-manager
   Issuer in homelab-ui (bootstrap updated with cert-manager.io rules; user must re-apply), controller terminates TLS after the
   PROXY header, *.lan wildcard cert for Internal apps; or (B) Tailscale HTTPS on controller.<tailnet>.ts.net. Awaiting choice.
+- 2026-10-14: User chose option 1 (Let's Encrypt). v0.1.2 deployed: Issuer letsencrypt (DNS-01, Secret cloudflare-dns/api-token),
+  certs controller-tls + lan-wildcard-tls READY (LE YR2, exp 2027-01-12, auto-renew). Controller: tailnet :443 → 127.0.0.1:3443
+  (TLS after PROXY header, cert reloaded on change), :80 → 308 to https. Internal routes: websecure + tls lan-wildcard-tls
+  (copied per ns by k8s/lantls.ts, resynced 6h) + `<app>-route-http` redirect via Middleware homelab-https-redirect.
+  Verified: trusted TLS on controller, internal app 200 over https (trusted), http→https 301.
