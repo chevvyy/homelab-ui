@@ -85,6 +85,13 @@ rules:
   - apiGroups: ["", apps, batch, networking.k8s.io, traefik.io, policy, autoscaling]
     resources: ["*"]
     verbs: ["*"]
+  # Let's Encrypt certificates (DNS-01 via Cloudflare) for controller.howellsas.com and *.lan.
+  - apiGroups: [cert-manager.io]
+    resources: [issuers, certificates, certificaterequests]
+    verbs: ["*"]
+  - apiGroups: [acme.cert-manager.io]
+    resources: [orders, challenges]
+    verbs: [get, list, watch]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
