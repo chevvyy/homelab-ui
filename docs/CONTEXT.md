@@ -175,3 +175,9 @@ export LD_LIBRARY_PATH=/home/node/.local/chromelibs/root/usr/lib/x86_64-linux-gn
   -shared-dev-num=N to share). arr/jellyfin holds one i915. arr apps share PVC arr/data (media library). Cross-namespace volume
   sharing needs static PVs (cluster-scoped → bootstrap grant). Pool kinds proposed: GPU, shared volumes, shared env/secrets.
   Grants stored in cluster (ConfigMap in homelab-ui + workload annotations); controller-enforced, optional ResourceQuota.
+- 2026-10-19: BUG: stale app status/pod lists. Cause: k8s watch streams stopped delivering without closing (cache frozen ~since
+  Oct 14: headsup missing, deleted forecast-chat-mock shown healthy). Fixed in v0.1.6: resolve stream on 'close', TCP keepalive,
+  watchdog (WATCH_SECONDS+60s), full relist every RELIST_SECONDS (600), ignore failure conditions on RS with replicas=0, memo/rev
+  include RS + event RVs, Cluster page banner if a watch is silent >15 min. Verified the controller matches kubectl after deploy.
+  GitHub Actions had an incident during the release (runs showed "queued"), but image 0.1.6 exists and contains the fix (verified in pod).
+- Debug helper: $SCRATCH/ctl.sh /api/<path> = read-only GET to the running controller over :3443 with the user's PC tailnet identity.
