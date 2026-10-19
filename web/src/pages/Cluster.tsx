@@ -8,6 +8,8 @@ export function Cluster() {
   const links = useNativeLinks();
   if (!cluster) return <div className="page"><h1>Cluster</h1><Empty>Loading…</Empty></div>;
   const watchErrors = Object.entries(cluster.watch).filter(([, w]) => w.error);
+  // Watches hear at least a bookmark every few minutes; silence this long means a stuck stream.
+  const stale = Object.entries(cluster.watch).filter(([, w]) => !w.error && w.lastEvent && Date.now() - w.lastEvent > 15 * 60_000);
   const byNs = new Map<string, number>();
   for (const a of apps) byNs.set(a.namespace, (byNs.get(a.namespace) ?? 0) + 1);
 
@@ -20,6 +22,11 @@ export function Cluster() {
       {watchErrors.length > 0 && (
         <div className="banner banner-warn">
           Some resources can't be watched: {watchErrors.map(([k, w]) => `${k} (${w.error})`).join('; ')}
+        </div>
+      )}
+      {stale.length > 0 && (
+        <div className="banner banner-warn">
+          Live data may be out of date: no updates for {stale.map(([k, w]) => `${k} (${fmtAgo(w.lastEvent)})`).join(', ')}. It re-syncs automatically within 10 minutes.
         </div>
       )}
       {!cluster.metrics && <div className="banner banner-info">CPU and memory usage are unavailable (metrics-server not reachable).</div>}

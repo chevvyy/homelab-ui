@@ -78,6 +78,8 @@ export interface NodeSummary {
 export interface WatchState {
   synced: boolean;
   error?: string;
+  lastSync?: number;
+  lastEvent?: number;
 }
 
 export interface ClusterState {

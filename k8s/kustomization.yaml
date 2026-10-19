@@ -11,4 +11,4 @@ resources:
   - native-uis.yaml
 images:
   - name: ghcr.io/chevvyy/homelab-ui
-    newTag: "0.1.5"
+    newTag: "0.1.6"

@@ -142,13 +142,20 @@ export async function streamLines(
           if (line) onLine(line);
         }
       });
-      res.on('end', () => {
+      const finish = () => {
         if (buf) onLine(buf);
+        buf = '';
         resolve();
-      });
-      res.on('error', reject);
+      };
+      res.on('end', finish);
+      // A connection that closes without a clean end (reset, API server restart) must also
+      // finish the stream; otherwise the caller waits forever on a dead watch.
+      res.on('close', finish);
+      res.on('error', (e) => (signal?.aborted ? resolve() : reject(e)));
     });
     req.on('error', (e) => (signal?.aborted ? resolve() : reject(e)));
+    // Detect half-open connections (peer vanished without FIN) at the TCP level.
+    req.on('socket', (sock) => sock.setKeepAlive(true, 30_000));
     signal?.addEventListener('abort', () => req.destroy(), { once: true });
     req.end();
   });

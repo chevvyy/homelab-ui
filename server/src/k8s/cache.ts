@@ -4,7 +4,7 @@
 import { EventEmitter } from 'node:events';
 import { K8sError, KObject, R, ResourceKey, request, resourcePath, streamLines } from './client.js';
 
-export type WatchState = { synced: boolean; error?: string; lastSync?: number };
+export type WatchState = { synced: boolean; error?: string; lastSync?: number; lastEvent?: number };
 
 const WATCHED: ResourceKey[] = [
   'namespaces',
@@ -24,6 +24,12 @@ const WATCHED: ResourceKey[] = [
 ];
 
 const EVENT_TTL_MS = 60 * 60 * 1000;
+// The API server ends each watch after WATCH_SECONDS. If a stream is still open well past that,
+// the connection is dead without having closed; abort it.
+const WATCH_SECONDS = Number(process.env.WATCH_SECONDS ?? 300);
+const WATCHDOG_MS = (WATCH_SECONDS + 60) * 1000;
+// Safety net: re-list everything periodically so any missed event heals within this window.
+const RELIST_MS = Number(process.env.RELIST_SECONDS ?? 600) * 1000;
 
 function slim(obj: KObject): KObject {
   const md = { ...obj.metadata };
@@ -47,6 +53,7 @@ class Watcher {
   private abort?: AbortController;
   private stopped = false;
   private backoff = 1000;
+  private lastList = 0;
 
   constructor(
     public key: ResourceKey,
@@ -72,18 +79,22 @@ class Watcher {
     }
     this.items = next;
     this.resourceVersion = res.metadata?.resourceVersion ?? '';
-    this.state = { synced: true, lastSync: Date.now() };
+    this.lastList = Date.now();
+    this.state = { synced: true, lastSync: this.lastList, lastEvent: this.lastList };
     this.onChange(this.key);
   }
 
   private async watch() {
     const rt = R[this.key];
     this.abort = new AbortController();
+    const abort = this.abort;
+    const watchdog = setTimeout(() => abort.abort(), WATCHDOG_MS);
     let gone = false;
     await streamLines(
       resourcePath(rt),
-      { watch: 1, resourceVersion: this.resourceVersion, allowWatchBookmarks: true, timeoutSeconds: 300 },
+      { watch: 1, resourceVersion: this.resourceVersion, allowWatchBookmarks: true, timeoutSeconds: WATCH_SECONDS },
       (line) => {
+        this.state.lastEvent = Date.now();
         let ev: any;
         try {
           ev = JSON.parse(line);
@@ -102,9 +113,9 @@ class Watcher {
         else this.items.set(keyOf(full), full);
         this.onChange(this.key);
       },
-      this.abort.signal,
-    );
-    if (gone) this.resourceVersion = '';
+      abort.signal,
+    ).finally(() => clearTimeout(watchdog));
+    if (gone || Date.now() - this.lastList > RELIST_MS) this.resourceVersion = '';
   }
 
   private async loop() {

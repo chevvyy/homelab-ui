@@ -191,7 +191,8 @@ export function buildApps(): AppSummary[] {
     ...[...groups.values()].flatMap((g) => [...g.workloads, ...g.pods].map((o) => o.metadata.resourceVersion ?? '')),
     ...services.map((s) => s.metadata.resourceVersion ?? ''),
     ...routes.map((r) => r.metadata.resourceVersion ?? ''),
-    String(events.length),
+    ...[...rsByName.values()].map((r) => r.metadata.resourceVersion ?? ''),
+    ...events.map((e) => e.metadata.resourceVersion ?? ''),
   ]);
   if (memo?.key === memoKey) return memo.apps;
 
@@ -224,7 +225,9 @@ export function buildApps(): AppSummary[] {
     const appEvents = [...g.workloads, ...rsOfApp, ...g.pods].flatMap((o) => eventsByObj.get(`${g.namespace}/${o.kind}/${o.metadata.name}`) ?? []);
 
     const problems: Problem[] = [];
-    for (const w of g.workloads) problems.push(...workloadProblems(w, rsOfApp, appEvents));
+    // Old ReplicaSets (scaled to 0) keep stale failure conditions forever; only live ones count.
+    const liveRs = rsOfApp.filter((rs) => (rs.spec?.replicas ?? 0) > 0);
+    for (const w of g.workloads) problems.push(...workloadProblems(w, liveRs, appEvents));
     for (const p of g.pods) if (!p.metadata.deletionTimestamp) problems.push(...podProblems(p));
 
     const desired = workloads.reduce((n, w) => n + (w.kind === 'CronJob' ? 0 : w.desired), 0) || (workloads.length ? 0 : g.pods.length);
@@ -288,7 +291,7 @@ export function buildApps(): AppSummary[] {
       linkedBy: [],
       sourceType,
       createdAt: created,
-      rev: hash([...g.workloads, ...g.pods, ...appServices, ...appRoutes].map((o) => o.metadata.resourceVersion ?? '').concat(String(appEvents.length))),
+      rev: hash([...g.workloads, ...rsOfApp, ...g.pods, ...appServices, ...appRoutes, ...appEvents].map((o) => o.metadata.resourceVersion ?? '')),
     });
   }
   const byId = new Map(apps.map((a) => [a.id, a]));
